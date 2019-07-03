@@ -1,10 +1,11 @@
 class V1::KrameriusController < V1::V1Controller
-
   require 'open-uri'
+  # require 'json'
 
   def citation
     code = params[:code]
-    uuid = params[:uuid]    
+    uuid = params[:uuid] 
+    f = params[:format] || "txt"
     if code.nil?
       render status: 422, plain: "Missing code parameter" and return
     end
@@ -15,25 +16,140 @@ class V1::KrameriusController < V1::V1Controller
     if base_url.nil?
       render status: 404, plain: "Not Found" and return
     end
-    mods_url = "#{base_url}/search/api/v5.0/item/#{uuid}/streams/BIBLIO_MODS"
-    citation = build_citation(mods_url)
-    render status: 200, plain: "#{citation}"
+    begin
+      render status: 200, plain: build_citation(base_url, uuid, f)
+    rescue OpenURI::HTTPError => e
+      if e.to_s.strip == "404"
+        render status: 404, plain: "Not Found"
+      else
+        render status: 422, plain: "HTTP Error"
+      end
+    end 
+
+    # citation = build_citation(base_url, uuid)
+    # render status: 200, plain: "#{citation}"
   end
 
 
   def test
-    citation = build_citation("http://localhost:8080/mods.xml")
-    render status: 200, plain: "#{citation}"
+    mods = xml("http://localhost:8080/mods.xml")
+    render status: 200, plain: "#{authors(mods)}"
   end    
 
   private
 
-    def build_citation(mods_url)
-      doc = Nokogiri::XML(open(mods_url))
-      doc.remove_namespaces!
-      mods = doc.xpath('modsCollection/mods')
-      authors(mods) + title(mods)
+    def build_citation(base, uuid, f)
+      root_item =  item(base, uuid)     
+      model = root_item["model"]
+      page_number = root_item["details"]["pagenumber"] if model == "page" && root_item["details"]
+      context = root_item["context"][0]
+      root = context[0]
+      root_uuid = root["pid"]
+      root_model= root["model"]
+      root_mods = mods(base, root_uuid)
+      periodical_volume = nil
+      periodical_issue = nil
+      article_mods = nil
+      edition = nil
+      context[1..-1].each do |doc|
+        if doc["model"] == "periodicalvolume"
+          periodical_volume = item(base, doc["pid"])
+        elsif doc["model"] == "periodicalitem"
+          periodical_issue = item(base, doc["pid"])
+          edition = edition(mods(base, doc["pid"]))
+        elsif doc["model"] == "article"
+          article_mods = mods(base, doc["pid"])
+        end
+      end
+      citation = ""
+      citation += authors(root_mods) unless root_model == "periodical"
+
+
+      unless article_mods.blank?
+        citation += authors(article_mods)
+        citation += title(article_mods, "txt")
+      end
+
+      citation += title(root_mods, f)
+      if periodical_volume.nil? && periodical_issue.nil?
+        citation += publisher(root_mods)
+      else
+        publisher = publisher_place_and_name(root_mods)
+        citation += volume_and_issue(publisher, periodical_volume, periodical_issue, edition, f)
+      end
+
+      unless article_mods.blank?
+        extent = article_extent(article_mods)
+        citation += "#{extent}. " unless extent.blank?
+      end
+
+      unless page_number.blank?
+        page_number = page_number.strip.gsub("\u00A0", "")
+        citation += "s. #{page_number}. "
+      end
+      citation += isbn(root_mods) + issn(root_mods)
+      citation.strip!
     end
+
+
+    def volume_and_issue(publisher, volume, issue, edition, f)
+      volume_number = volume["details"]["volumeNumber"] if volume && volume["details"]
+      volume_year = volume["details"]["year"] if volume && volume["details"]
+      issue_number = issue["details"]["issueNumber"] if issue && issue["details"]
+      issue_part = issue["details"]["partNumber"] if issue && issue["details"]
+      issue_date = issue["details"]["date"] if issue && issue["details"]
+      issue_number = issue_part if issue_number.blank?
+      if !issue_date.blank?
+        publisher += ", " unless publisher.blank?
+        publisher += issue_date
+      elsif !volume_year.blank?
+        publisher += ", " unless publisher.blank?
+        publisher += volume_year
+      end
+      unless volume_number.blank?
+        publisher += ", " unless publisher.blank?
+        publisher += f == "html" ? "<b>#{volume_number}</b>" : "#{volume_number}"
+      end
+      unless issue_number.blank? && edition.blank?
+        issue = ""
+        issue += issue_number unless issue_number.blank?
+        unless edition.blank?
+          issue += ", " unless issue.blank?
+          issue += edition unless issue.blank?
+        end
+        publisher += "(#{issue})"
+      end
+      publisher.strip!
+      return publisher.blank? ? "" : publisher + ". "
+    end
+
+
+    def json(url)
+      JSON.load(open(url))
+    end
+
+    def item_url(base, uuid)
+      "#{base}/search/api/v5.0/item/#{uuid}"
+    end
+
+    def mods_url(base, uuid)
+      "#{item_url(base, uuid)}/streams/BIBLIO_MODS"
+    end
+
+    def xml(url) 
+      doc = Nokogiri::XML(open(url))
+      doc.remove_namespaces!
+      doc.xpath('modsCollection/mods').first
+    end
+
+    def mods(base, uuid)
+      xml(mods_url(base, uuid))
+    end
+    
+    def item(base, uuid)
+      json(item_url(base, uuid))
+    end
+
 
     def authors(mods)
       list = []
@@ -85,29 +201,121 @@ class V1::KrameriusController < V1::V1Controller
       name
     end
 
-    def title(mods)
+    def title(mods, f)
       list = mods.xpath("titleInfo")
       return "" if list.empty?
       titleInfo = list[0]
-      title = titleInfo.xpath("title").text
-      nonSort = titleInfo.xpath("nonSort").text
-      subTitle = titleInfo.xpath("subTitle").text
-      partNumber = titleInfo.xpath("partNumber").text
-      partName = titleInfo.xpath("partName").text
+      title = first_content(titleInfo, "title")
+      nonSort = first_content(titleInfo, "nonSort")
+      subTitle = first_content(titleInfo, "subTitle")
+      partNumber = first_content(titleInfo, "partNumber")
+      partName = first_content(titleInfo, "partName")
       result = title
       result = "#{nonSort} #{title}" unless nonSort.blank?
       result += ": #{subTitle}" unless subTitle.blank?
       result += ", #{partNumber}" unless partNumber.blank?
       result += ": #{partName}" unless partName.blank?
-      result
+      return "" if result.blank?
+      return f == "html" ? "<i>#{result}</i>. " : "#{result}. "
     end
 
+
+    def edition(mods)
+      mods.xpath("//note").each do |n|
+        note = n.text.strip.downcase
+        return "ranní vydání" if note == "ranní vydání;"
+        return "odpolední vydání" if note == "odpolední vydání;"
+        return "večerní vydání" if note == "večerní vydání;"
+      end
+      return ""
+    end
+
+    def article_extent(mods)
+      extents = mods.xpath("//relatedItem/part/extent")
+      if extents.empty?
+        return ""
+      end
+      extent = extents[0]
+      ext_start = first_content(extent, 'start')
+      ext_end = first_content(extent, 'end')
+      ext_list = first_content(extent, 'list')
+      if !ext_start.blank? && !ext_end.blank?
+        if ext_start == ext_end
+          return ext_start
+        else
+          return "#{ext_start}-#{ext_end}"
+        end
+      elsif !ext_list.blank?
+        if ext_list.index("-").nil? || ext_list.split("-")[0] != ext_list.split("-")[1]
+          return ext_list
+        else
+          return ext_list.split("-")[0]
+        end
+      end
+
+
+
+      return ""
+    end
+
+    def publisher_place_and_name(mods)
+      result = ""
+      place = trim(first_content(mods, "originInfo/place/placeTerm[@type='text' and not(@authority='marccountry')]"), ":")
+      publisher = trim(first_content(mods, "originInfo/publisher"), ",")
+      result = place unless place.blank?
+      unless publisher.blank?
+        result += result.blank? ? publisher : ": #{publisher}"
+      end
+      return result.blank? ? "" : "#{result}"
+    end
+
+    def publisher(mods)
+      result = publisher_place_and_name(mods)
+      date_from = first_content(mods, 'originInfo/dateIssued[@point="start"]')
+      date_to = first_content(mods, 'originInfo/dateIssued[@point="end"]')
+      date = first_content(mods, 'originInfo/dateIssued[not(@type)]')
+      if !date_from.blank? && !date_to.blank?
+        date = "#{date_from}-#{date_to}"
+      elsif  !date_from.blank?
+        date = date_from
+      elsif  !date_to.blank?
+        date = date_to
+      end
+      unless date.blank?
+        result += result.blank? ? date : ", #{date}"
+      end
+      return result.blank? ? "" : "#{result}. "
+    end
+
+    def volume(item, f)
+      
+    end
+
+
+
+
+
+    def isbn(mods)
+      isbn = first_content(mods, 'identifier[@type="isbn"]')
+      return isbn.blank? ? "" : "ISBN #{isbn}. "
+    end
+
+    def issn(mods)
+      issn = first_content(mods, 'identifier[@type="issn"]')
+      return issn.blank? ? "" : "ISSN #{issn}. "
+    end
 
     def first_content(element, xpath)
       first = element.xpath(xpath).first
-      first ? first.text : nil
+      first ? first.text.strip : ""
     end
 
+    def trim(text, char)
+      return "" if text.blank?
+      result = text.strip
+      result = result[0...-1] if result[-1] == char
+      return result.strip
+    end
 
     def get_base_url(code)
       case code
