@@ -285,6 +285,9 @@ class V1::KrameriusController < V1::V1Controller
         date = date_to
       end
       unless date.blank?
+        if date.end_with?("-9999") || date.end_with?("-uuuu")
+          date = date[0...-4]
+        end
         result += result.blank? ? date : ", #{date}"
       end
       return result.blank? ? "" : "#{result}. "
