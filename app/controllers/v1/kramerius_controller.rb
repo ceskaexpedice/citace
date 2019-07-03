@@ -226,9 +226,10 @@ class V1::KrameriusController < V1::V1Controller
     def edition(mods)
       mods.xpath("//note").each do |n|
         note = n.text.strip.downcase
-        return "ranní vydání" if note == "ranní vydání;"
-        return "odpolední vydání" if note == "odpolední vydání;"
-        return "večerní vydání" if note == "večerní vydání;"
+        return "ranní vydání" if note.index "ranní vydání;"
+        return "odpolední vydání" if note.index "odpolední vydání;"
+        return "polední vydání" if note.index "polední vydání;"
+        return "večerní vydání" if note.index "večerní vydání;"
       end
       return ""
     end
