@@ -5,4 +5,6 @@ Rails.application.routes.draw do
     get 'test', to: 'kramerius#test'
   end
 
+  get 'logs', to: 'logs#index'
+
 end

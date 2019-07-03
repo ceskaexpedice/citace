@@ -5,19 +5,21 @@ class V1::KrameriusController < V1::V1Controller
   def citation
     code = params[:code]
     uuid = params[:uuid] 
+    base_url = params[:url]
     f = params[:format] || "txt"
-    if code.nil?
-      render status: 422, plain: "Missing code parameter" and return
+    if code.nil? && base_url.nil?
+      render status: 422, plain: "Missing code or url parameter" and return
     end
     if uuid.nil?
       render status: 422, plain: "Missing uuid parameter" and return
     end
-    base_url = get_base_url code
+    base_url = get_base_url code if base_url.nil?
     if base_url.nil?
       render status: 404, plain: "Not Found" and return
     end
     begin
-      render status: 200, plain: build_citation(base_url, uuid, f)
+      citation = build_citation(base_url, uuid, f)
+      render status: 200, plain: citation
     rescue OpenURI::HTTPError => e
       if e.to_s.strip == "404"
         render status: 404, plain: "Not Found"
@@ -25,16 +27,13 @@ class V1::KrameriusController < V1::V1Controller
         render status: 422, plain: "HTTP Error"
       end
     end 
-
-    # citation = build_citation(base_url, uuid)
-    # render status: 200, plain: "#{citation}"
   end
 
 
-  def test
-    mods = xml("http://localhost:8080/mods.xml")
-    render status: 200, plain: "#{authors(mods)}"
-  end    
+  # def test
+  #   mods = xml("http://localhost:8080/mods.xml")
+  #   render status: 200, plain: "#{authors(mods)}"
+  # end    
 
   private
 
@@ -89,6 +88,8 @@ class V1::KrameriusController < V1::V1Controller
       end
       citation += isbn(root_mods) + issn(root_mods)
       citation.strip!
+      Log.create(kramerius: base, uuid: uuid, model: model, root_model: root_model, citation: citation, format: f, timestamp: Time.now)
+      return citation
     end
 
 
