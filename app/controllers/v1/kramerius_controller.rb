@@ -49,13 +49,13 @@ class V1::KrameriusController < V1::V1Controller
       periodical_volume = nil
       periodical_issue = nil
       article_mods = nil
-      edition = nil
+      issue_mods = nil
       context[1..-1].each do |doc|
         if doc["model"] == "periodicalvolume"
           periodical_volume = item(base, doc["pid"])
         elsif doc["model"] == "periodicalitem"
           periodical_issue = item(base, doc["pid"])
-          edition = edition(mods(base, doc["pid"]))
+          issue_mods = mods(base, doc["pid"])
         elsif doc["model"] == "article"
           article_mods = mods(base, doc["pid"])
         end
@@ -74,12 +74,7 @@ class V1::KrameriusController < V1::V1Controller
         citation += publisher(root_mods)
       else
         publisher = publisher_place_and_name(root_mods)
-        citation += volume_and_issue(publisher, periodical_volume, periodical_issue, edition, f)
-      end
-
-      unless article_mods.blank?
-        extent = article_extent(article_mods)
-        citation += "#{extent}. " unless extent.blank?
+        citation += volume_and_issue(publisher, periodical_volume, periodical_issue, issue_mods, article_mods, f)
       end
 
       unless page_number.blank?
@@ -93,7 +88,7 @@ class V1::KrameriusController < V1::V1Controller
     end
 
 
-    def volume_and_issue(publisher, volume, issue, edition, f)
+    def volume_and_issue(publisher, volume, issue, issue_mods, article_mods, f)
       volume_number = volume["details"]["volumeNumber"] if volume && volume["details"]
       volume_year = volume["details"]["year"] if volume && volume["details"]
       issue_number = issue["details"]["issueNumber"] if issue && issue["details"]
@@ -111,16 +106,23 @@ class V1::KrameriusController < V1::V1Controller
         publisher += ", " unless publisher.blank?
         publisher += f == "html" ? "<b>#{volume_number}</b>" : "#{volume_number}"
       end
-      unless issue_number.blank? && edition.blank?
+      unless issue_number.blank? && issue_mods.blank?
         issue = ""
         issue += issue_number unless issue_number.blank?
-        unless edition.blank?
-          issue += ", " unless issue.blank?
-          issue += edition unless issue.blank?
+        unless issue_mods.blank?
+          edition = edition(issue_mods)
+          unless edition.blank?
+            issue += ", " unless issue.blank?
+            issue += edition unless issue.blank?
+          end
         end
         publisher += "(#{issue})"
       end
       publisher.strip!
+      unless article_mods.blank?
+        extent = article_extent(article_mods)
+        publisher += ", #{extent}" unless extent.blank?
+      end
       return publisher.blank? ? "" : publisher + ". "
     end
 
