@@ -235,7 +235,7 @@ class V1::KrameriusController < V1::V1Controller
     end
 
     def article_extent(mods)
-      extents = mods.xpath("//relatedItem/part/extent")
+      extents = mods.xpath("//part/extent")
       if extents.empty?
         return ""
       end
