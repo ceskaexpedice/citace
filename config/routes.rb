@@ -6,5 +6,6 @@ Rails.application.routes.draw do
   end
 
   get 'logs', to: 'logs#index'
+  get 'logs/group', to: 'logs#group'
 
 end
