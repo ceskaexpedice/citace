@@ -7,7 +7,7 @@ class V1::KrameriusController < V1::V1Controller
     uuid = params[:uuid] 
     base_url = params[:url]
     base_url = "https://kramerius.mzk.cz" if base_url == "https://kramerius-vs.mzk.cz" || base_url == "https://dnnt.mzk.cz"
-    base_url = "https://kramerius5.nkp.cz" if base_url == "https://kramerius-vs.nkp.cz" || base_url == "https://kramerius-dnnt.nkp.cz"
+    base_url = "https://kramerius5.nkp.cz" if base_url == "https://kramerius-vs.nkp.cz" || base_url == "https://kramerius-dnnt.nkp.cz" || base_url == "https://ndk.cz"
     f = params[:format] || "txt"
     if code.nil? && base_url.nil?
       render status: 422, plain: "Missing code or url parameter" and return
