@@ -83,6 +83,7 @@ class V1::KrameriusController < V1::V1Controller
         page_number = page_number.strip.gsub("\u00A0", "")
         citation += "s. #{page_number}. "
       end
+      citation += doi(article_mods) unless article_mods.blank?
       citation += isbn(root_mods) + issn(root_mods)
       citation.strip!
       Log.create(kramerius: base, uuid: uuid, model: model, root_model: root_model, citation: citation, format: f, timestamp: Time.now)
@@ -313,6 +314,12 @@ class V1::KrameriusController < V1::V1Controller
       issn = first_content(mods, 'identifier[@type="issn"]')
       return issn.blank? ? "" : "ISSN #{issn}. "
     end
+
+    def doi(mods)
+      doi = first_content(mods, 'identifier[@type="doi"]')
+      return doi.blank? ? "" : "DOI: #{doi}. "
+    end
+
 
     def first_content(element, xpath)
       first = element.xpath(xpath).first
