@@ -5,6 +5,7 @@ class V1::KrameriusController < V1::V1Controller
   def citation
     code = params[:code]
     uuid = params[:uuid] 
+    lang = params[:lang] || "cs" 
     base_url = params[:url]
     base_url = "https://kramerius.mzk.cz" if base_url == "https://kramerius-vs.mzk.cz" || base_url == "https://dnnt.mzk.cz"
     base_url = "https://kramerius5.nkp.cz" if base_url == "https://kramerius-vs.nkp.cz" || base_url == "https://kramerius-dnnt.nkp.cz" || base_url == "https://ndk.cz"
@@ -20,7 +21,7 @@ class V1::KrameriusController < V1::V1Controller
       render status: 404, plain: "Not Found" and return
     end
     begin
-      citation = build_citation(base_url, uuid, f)
+      citation = build_citation(base_url, uuid, f, lang)
       render status: 200, plain: citation
     rescue OpenURI::HTTPError => e
       if e.to_s.strip == "404"
@@ -39,7 +40,7 @@ class V1::KrameriusController < V1::V1Controller
 
   private
 
-    def build_citation(base, uuid, f)
+    def build_citation(base, uuid, f, lang)
       root_item =  item(base, uuid)     
       model = root_item["model"]
       page_number = root_item["details"]["pagenumber"] if model == "page" && root_item["details"]
@@ -81,7 +82,8 @@ class V1::KrameriusController < V1::V1Controller
 
       unless page_number.blank?
         page_number = page_number.strip.gsub("\u00A0", "")
-        citation += "s. #{page_number}. "
+        p = lang == "cs" ? "s" : "p"
+        citation += "#{p}. #{page_number}. "
       end
       citation += doi(article_mods) unless article_mods.blank?
       citation += isbn(root_mods) + issn(root_mods)
