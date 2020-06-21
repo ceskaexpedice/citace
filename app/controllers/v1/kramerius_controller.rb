@@ -319,10 +319,11 @@ class V1::KrameriusController < V1::V1Controller
 
     def doi(mods)
       doi = first_content(mods, 'identifier[@type="doi"]')
+      has_doi = !doi.blank?
       if doi && !doi.downcase.start_with?("http")
         doi = 'http://dx.doi.org/' + doi
       end
-      return doi.blank? ? "" : "DOI: #{doi}. "
+      return has_doi ? "DOI: #{doi}. " : ""
     end
 
 
