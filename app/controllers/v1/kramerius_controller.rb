@@ -111,7 +111,7 @@ class V1::KrameriusController < V1::V1Controller
         p = lang == "cs" ? "s" : "p"
         citation += "#{p}. #{page_number}. "
       end
-      citation += doi(article_mods) unless article_mods.blank?
+      citation += doi(article_mods, f) unless article_mods.blank?
       citation += isbn(root_mods) + issn(root_mods)
       citation.strip!
       Log.create(kramerius: base, uuid: uuid, model: model, root_model: root_model, citation: citation, format: f, timestamp: Time.now)
@@ -331,14 +331,6 @@ class V1::KrameriusController < V1::V1Controller
       return result.blank? ? "" : "#{result}. "
     end
 
-    def volume(item, f)
-      
-    end
-
-
-
-
-
     def isbn(mods)
       isbn = first_content(mods, 'identifier[@type="isbn"]')
       return isbn.blank? ? "" : "ISBN #{isbn}. "
@@ -349,12 +341,16 @@ class V1::KrameriusController < V1::V1Controller
       return issn.blank? ? "" : "ISSN #{issn}. "
     end
 
-    def doi(mods)
+    def doi(mods, f)
       doi = first_content(mods, 'identifier[@type="doi"]')
       if doi && !doi.downcase.start_with?("http")
-        doi = 'http://dx.doi.org/' + doi
+        doi = 'https://doi.org/' + doi
       end
-      return doi.blank? ? "" : "DOI: #{doi}. "
+      return "" if doi.blank? 
+      if f == "html" 
+        doi = "<a href=\"#{doi}\" target=\"_blank\">#{doi}</a>"
+      end
+      return "DOI: #{doi}. "
     end
 
 
