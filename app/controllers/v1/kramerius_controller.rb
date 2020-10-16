@@ -51,6 +51,7 @@ class V1::KrameriusController < V1::V1Controller
       root_mods = mods(base, root_uuid)
       periodical_volume = nil
       periodical_issue = nil
+      monograph_unit_mods = nil
       article_mods = nil
       issue_mods = nil
       context[1..-1].each do |doc|
@@ -59,12 +60,27 @@ class V1::KrameriusController < V1::V1Controller
         elsif doc["model"] == "periodicalitem"
           periodical_issue = item(base, doc["pid"])
           issue_mods = mods(base, doc["pid"])
+        elsif doc["model"] == "monographunit"
+          monograph_unit_mods = mods(base, doc["pid"])
         elsif doc["model"] == "article"
           article_mods = mods(base, doc["pid"])
         end
       end
       citation = ""
-      citation += authors(root_mods) unless root_model == "periodical"
+      monograph_unit_number = nil
+      if root_model != "periodical"
+        if monograph_unit_mods
+          authors = authors(monograph_unit_mods)
+          monograph_unit_number = unit_number(monograph_unit_mods) 
+          unless authors.blank?
+            citation += authors
+          else
+            citation += authors(root_mods)
+          end
+        else
+          citation += authors(root_mods)
+        end
+      end
 
 
       unless article_mods.blank?
@@ -74,10 +90,20 @@ class V1::KrameriusController < V1::V1Controller
 
       citation += title(root_mods, f)
       if periodical_volume.nil? && periodical_issue.nil?
-        citation += publisher(root_mods)
+        if monograph_unit_mods
+          pub = publisher(monograph_unit_mods)
+          pub.blank? ? citation += publisher(root_mods) : citation += pub
+        else
+          citation += publisher(root_mods)
+        end
       else
         publisher = publisher_place_and_name(root_mods)
         citation += volume_and_issue(publisher, periodical_volume, periodical_issue, issue_mods, article_mods, f)
+      end
+
+      unless monograph_unit_number.blank?
+        p = lang == "cs" ? "sv." : "sv."
+        citation += "#{p} #{monograph_unit_number}. "
       end
 
       unless page_number.blank?
@@ -207,6 +233,12 @@ class V1::KrameriusController < V1::V1Controller
         name = given
       end
       name
+    end
+
+    def unit_number(mods)
+      list = mods.xpath("titleInfo")
+      return "" if list.empty?
+      return first_content(list[0], "partNumber")
     end
 
     def title(mods, f)
