@@ -343,10 +343,10 @@ class V1::KrameriusController < V1::V1Controller
 
     def doi(mods, f)
       doi = first_content(mods, 'identifier[@type="doi"]')
-      if !doi.blank? && !doi.downcase.start_with?("http")
+      return "" if doi.blank? 
+      if !doi.downcase.start_with?("http")
         doi = 'https://doi.org/' + doi
       end
-      return "" if doi.blank? 
       if f == "html" 
         doi = "<a href=\"#{doi}\" target=\"_blank\">#{doi}</a>"
       end
