@@ -60,6 +60,11 @@ class V1::KrameriusController < V1::V1Controller
         elsif doc["model"] == "periodicalitem"
           periodical_issue = item(base, doc["pid"])
           issue_mods = mods(base, doc["pid"])
+        elsif doc["model"] == "supplement"
+          if periodical_issue.nil?
+            periodical_issue = item(base, doc["pid"])
+            issue_mods = mods(base, doc["pid"])
+          end
         elsif doc["model"] == "monographunit"
           monograph_unit_mods = mods(base, doc["pid"])
         elsif doc["model"] == "article"
@@ -126,6 +131,7 @@ class V1::KrameriusController < V1::V1Controller
       issue_part = issue["details"]["partNumber"] if issue && issue["details"]
       issue_date = issue["details"]["date"] if issue && issue["details"]
       issue_number = issue_part if issue_number.blank?
+      issue_number = mods_element(issue_mods, "//titleInfo/partNumber") if issue_number.blank? && !issue_mods.blank?
       if !issue_date.blank?
         publisher += ", " unless publisher.blank?
         publisher += issue_date
@@ -267,6 +273,13 @@ class V1::KrameriusController < V1::V1Controller
         return "odpolední vydání" if note.index "odpolední vydání;"
         return "polední vydání" if note.index "polední vydání;"
         return "večerní vydání" if note.index "večerní vydání;"
+      end
+      return ""
+    end
+
+    def mods_element(mods, xpath)
+      mods.xpath(xpath).each do |n|
+        return n.text.strip || ""
       end
       return ""
     end
