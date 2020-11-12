@@ -85,8 +85,7 @@ class V1::KrameriusController < V1::V1Controller
         else
           citation += authors(root_mods)
         end
-      end
-
+      end 
 
       unless article_mods.blank?
         citation += authors(article_mods)
@@ -109,6 +108,19 @@ class V1::KrameriusController < V1::V1Controller
       unless monograph_unit_number.blank?
         p = lang == "cs" ? "sv." : "sv."
         citation += "#{p} #{monograph_unit_number}. "
+      end
+
+      if root_model = "map"
+        extent = mods_element(root_mods, "//physicalDescription/extent") 
+        scale = mods_element(root_mods, "//subject/cartographics/scale") 
+        scale = (scale || "").strip
+        if scale.blank?
+          scale = "Měřítko neuvedeno"
+        else
+          scale = scale[8, scale.length] if scale.downcase.start_with? "měřítko"
+        end
+        citation += "#{scale}. "
+        citation += "#{extent.strip}. " unless extent.blank?
       end
 
       unless page_number.blank?
