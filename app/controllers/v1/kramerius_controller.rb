@@ -122,7 +122,7 @@ class V1::KrameriusController < V1::V1Controller
         citation += "#{p} #{monograph_unit_number}. "
       end
 
-      if root_model = "map"
+      if root_model == "map"
         extent = mods_element(root_mods, "//physicalDescription/extent") 
         citation += "#{extent.strip}. " unless extent.blank?
       end
