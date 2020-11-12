@@ -93,6 +93,18 @@ class V1::KrameriusController < V1::V1Controller
       end
 
       citation += title(root_mods, f)
+
+      if root_model = "map"
+        scale = mods_element(root_mods, "//subject/cartographics/scale") 
+        scale = (scale || "").strip
+        if scale.blank?
+          scale = "Měřítko neuvedeno"
+        else
+          scale = scale[8, scale.length] if scale.downcase.start_with? "měřítko"
+        end
+        citation += "#{scale}. "
+      end
+      
       if periodical_volume.nil? && periodical_issue.nil?
         if monograph_unit_mods
           pub = publisher(monograph_unit_mods)
@@ -112,14 +124,6 @@ class V1::KrameriusController < V1::V1Controller
 
       if root_model = "map"
         extent = mods_element(root_mods, "//physicalDescription/extent") 
-        scale = mods_element(root_mods, "//subject/cartographics/scale") 
-        scale = (scale || "").strip
-        if scale.blank?
-          scale = "Měřítko neuvedeno"
-        else
-          scale = scale[8, scale.length] if scale.downcase.start_with? "měřítko"
-        end
-        citation += "#{scale}. "
         citation += "#{extent.strip}. " unless extent.blank?
       end
 
