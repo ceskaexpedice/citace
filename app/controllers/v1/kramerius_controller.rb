@@ -94,7 +94,7 @@ class V1::KrameriusController < V1::V1Controller
 
       citation += title(root_mods, f)
 
-      if root_model = "map"
+      if root_model == "map"
         scale = mods_element(root_mods, "//subject/cartographics/scale") 
         scale = (scale || "").strip
         if scale.blank?
@@ -104,7 +104,7 @@ class V1::KrameriusController < V1::V1Controller
         end
         citation += "#{scale}. "
       end
-      
+
       if periodical_volume.nil? && periodical_issue.nil?
         if monograph_unit_mods
           pub = publisher(monograph_unit_mods)
