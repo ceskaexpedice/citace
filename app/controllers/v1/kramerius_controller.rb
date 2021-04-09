@@ -130,6 +130,7 @@ class V1::KrameriusController < V1::V1Controller
       unless page_number.blank?
         page_number = page_number.strip.gsub("\u00A0", "")
         p = lang == "cs" ? "s" : "p"
+        citation = citation[0..(citation.length - 3)] + ", " if citation.end_with? ". "
         citation += "#{p}. #{page_number}. "
       end
       citation += doi(article_mods, f) unless article_mods.blank?
