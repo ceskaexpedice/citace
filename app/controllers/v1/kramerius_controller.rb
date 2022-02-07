@@ -6,6 +6,7 @@ class V1::KrameriusController < V1::V1Controller
     code = params[:code]
     uuid = params[:uuid] 
     lang = params[:lang] || "cs" 
+    k7 = params[:k7] == "true"
     base_url = params[:url]
     base_url = "https://kramerius.mzk.cz" if base_url == "https://kramerius-vs.mzk.cz" || base_url == "https://dnnt.mzk.cz"
     base_url = "https://kramerius5.nkp.cz" if base_url == "https://kramerius-vs.nkp.cz" || base_url == "https://kramerius-dnnt.nkp.cz" || base_url == "https://ndk.cz"
@@ -21,7 +22,7 @@ class V1::KrameriusController < V1::V1Controller
       render status: 404, plain: "Not Found" and return
     end
     begin
-      citation = build_citation(base_url, uuid, f, lang)
+      citation = build_citation(base_url, uuid, f, lang, k7)
       render status: 200, plain: citation
     rescue OpenURI::HTTPError => e
       if e.to_s.strip == "404"
@@ -40,15 +41,15 @@ class V1::KrameriusController < V1::V1Controller
 
   private
 
-    def build_citation(base, uuid, f, lang)
-      root_item =  item(base, uuid)     
+    def build_citation(base, uuid, f, lang, k7)
+      root_item =  item(base, uuid, k7)
       model = root_item["model"]
-      page_number = root_item["details"]["pagenumber"] if model == "page" && root_item["details"]
-      context = root_item["context"][0]
+      page_number = root_item["pagenumber"] if model == "page"
+      context = root_item["context"]
       root = context[0]
       root_uuid = root["pid"]
       root_model= root["model"]
-      root_mods = mods(base, root_uuid)
+      root_mods = mods(base, root_uuid, k7)
       periodical_volume = nil
       periodical_issue = nil
       monograph_unit_mods = nil
@@ -56,19 +57,19 @@ class V1::KrameriusController < V1::V1Controller
       issue_mods = nil
       context[1..-1].each do |doc|
         if doc["model"] == "periodicalvolume"
-          periodical_volume = item(base, doc["pid"])
+          periodical_volume = item(base, doc["pid"], k7)
         elsif doc["model"] == "periodicalitem"
-          periodical_issue = item(base, doc["pid"])
-          issue_mods = mods(base, doc["pid"])
+          periodical_issue = item(base, doc["pid"], k7)
+          issue_mods = mods(base, doc["pid"], k7)
         elsif doc["model"] == "supplement"
           if periodical_issue.nil?
-            periodical_issue = item(base, doc["pid"])
-            issue_mods = mods(base, doc["pid"])
+            periodical_issue = item(base, doc["pid"], k7)
+            issue_mods = mods(base, doc["pid"], k7)
           end
         elsif doc["model"] == "monographunit"
-          monograph_unit_mods = mods(base, doc["pid"])
+          monograph_unit_mods = mods(base, doc["pid"], k7)
         elsif doc["model"] == "article"
-          article_mods = mods(base, doc["pid"])
+          article_mods = mods(base, doc["pid"], k7)
         end
       end
       citation = ""
@@ -142,11 +143,11 @@ class V1::KrameriusController < V1::V1Controller
 
 
     def volume_and_issue(publisher, volume, issue, issue_mods, article_mods, f)
-      volume_number = volume["details"]["volumeNumber"] if volume && volume["details"]
-      volume_year = volume["details"]["year"] if volume && volume["details"]
-      issue_number = issue["details"]["issueNumber"] if issue && issue["details"]
-      issue_part = issue["details"]["partNumber"] if issue && issue["details"]
-      issue_date = issue["details"]["date"] if issue && issue["details"]
+      volume_number = volume["volumeNumber"] if volume
+      volume_year = volume["year"] if volume
+      issue_number = issue["issueNumber"] if issue
+      issue_part = issue["partNumber"] if issue
+      issue_date = issue["date"] if issue
       issue_number = issue_part if issue_number.blank?
       issue_number = mods_element(issue_mods, "//titleInfo/partNumber") if issue_number.blank? && !issue_mods.blank?
       if !issue_date.blank?
@@ -185,12 +186,12 @@ class V1::KrameriusController < V1::V1Controller
       JSON.load(open(url))
     end
 
-    def item_url(base, uuid)
-      "#{base}/search/api/v5.0/item/#{uuid}"
-    end
-
-    def mods_url(base, uuid)
-      "#{item_url(base, uuid)}/streams/BIBLIO_MODS"
+    def mods_url(base, uuid, k7)
+      if k7
+        "#{base}/search/api/client/v7.0/items/#{uuid}/metadata/mods"
+      else
+        "#{base}/search/api/v5.0/item/#{uuid}/streams/BIBLIO_MODS"
+      end
     end
 
     def xml(url) 
@@ -199,14 +200,51 @@ class V1::KrameriusController < V1::V1Controller
       doc.xpath('modsCollection/mods').first
     end
 
-    def mods(base, uuid)
-      xml(mods_url(base, uuid))
+    def mods(base, uuid, k7)
+      xml(mods_url(base, uuid, k7))
     end
     
-    def item(base, uuid)
-      json(item_url(base, uuid))
+    def item(base, uuid, k7)
+      result = {}
+      if k7
+        item = json("#{base}/search/api/client/v7.0/search?q=pid:%22#{uuid}%22&rows=1")["response"]["docs"][0]
+        context = []
+        models = item["own_model_path"].split("/")
+        pids = item["own_pid_path"].split("/")
+        (0..[models.count, pids.count].min - 1).each do |idx|
+          context << {
+            "pid" => pids[idx],
+            "model" => models[idx]
+          }
+        end
+        result["context"] = context
+        model = item["model"]
+        result["model"] = model
+        if model == "periodicalitem"
+          result["date"] = item["date.str"]
+          result["issueNumber"] = item["part.number.str"]
+        elsif model == "page"
+          result["pagenumber"] = item["page.number"]
+        elsif model == "periodicalvolume"
+          result["year"] = item["date.str"]
+          result["volumeNumber"] = item["part.number.str"]
+        end
+      else
+        item = json("#{base}/search/api/v5.0/item/#{uuid}")
+        result["context"] = item["context"][0]
+        result["model"] = item["model"]
+        d = item["details"] 
+        if d
+          result["pagenumber"] = d["pagenumber"]
+          result["volumeNumber"] = d["volumeNumber"]
+          result["year"] = d["year"]
+          result["issueNumber"] = d["issueNumber"]
+          result["partNumber"] = d["partNumber"]
+          result["date"] = d["date"]
+        end
+      end
+      return result
     end
-
 
     def authors(mods)
       list = []
